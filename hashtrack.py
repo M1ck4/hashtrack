@@ -21,15 +21,32 @@ VT_RATE_LIMIT = cfg.get_vt_rate_limit(config)
 VT_DAILY_QUOTA = cfg.get_vt_daily_quota(config)
 VT_USE_CACHE = cfg.get_vt_use_cache(config)
 
+def print_vt_result(h, result):
+    gui_link = f"https://www.virustotal.com/gui/file/{h}"
+    if 'error' in result:
+        print(f"{RED}  [!] Error: {result['error']}{RESET}")
+    else:
+        mal = result['malicious']
+        sus = result['suspicious']
+        und = result['undetected']
+        harmless = result['harmless']
+        print(f"  Malicious: {RED}{mal}{RESET}" if mal else f"  Malicious: {GREEN}{mal}{RESET}")
+        print(f"  Suspicious: {YELLOW}{sus}{RESET}" if sus else f"  Suspicious: {GREEN}{sus}{RESET}")
+        print(f"  Undetected: {und}")
+        print(f"  Harmless: {harmless}")
+        print(f"  Web Link: {gui_link}\n")
+
 def main():
     parser = argparse.ArgumentParser(
         prog="hashtrack",
         description="""
 HashTrack - A modular process hashing & logging tool.
 
-Scans running processes, computes SHA256 hashes, and optionally:
+Scans running processes, computes SHA256 hashes, or checks a specific file/hash.
+Optionally:
  - Exports results to JSON or CSV
- - Checks each hash against VirusTotal
+ - Compares a computed hash to an expected value (--compare)
+ - Checks a hash against VirusTotal (--vt)
  - Performs Authenticode signature checks (Windows only)
         """,
         epilog="""
@@ -46,10 +63,19 @@ EXAMPLES:
   4) hashtrack --check-signatures
      (Windows only) Calls PowerShell to check Authenticode signatures.
 
+  5) hashtrack --hashcheck suspicious.exe
+     Computes SHA256 of the specified file and prints it.
+
+  6) hashtrack --hashcheck suspicious.exe --compare a1b2c3d4...
+     Computes the hash and compares it to the provided expected hash.
+
+  7) hashtrack --hashcheck 8c7aaf3ea1fae2f38... --vt
+     Checks a provided hash directly against VirusTotal.
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
+    # Existing options
     parser.add_argument('--all', action='store_true',
                         help='Include all processes (user + system). Overrides --user if both are used.')
     parser.add_argument('--user', action='store_true',
@@ -72,8 +98,54 @@ EXAMPLES:
                         help='Delete logs older than X days (default = 7 or config.ini).')
     parser.add_argument('--quiet', action='store_true',
                         help='Suppress most console output (except the final timing message).')
+    # New hashcheck options
+    parser.add_argument('--hashcheck', type=str,
+                        help='Check a specific file or raw SHA256 hash. If a file path is provided, its hash is computed.')
+    parser.add_argument('--compare', type=str,
+                        help='Optional. Compare the computed hash to this expected value.')
 
     args = parser.parse_args()
+
+    # HashCheck mode: if --hashcheck is provided, process the single file/hash and exit early.
+    if args.hashcheck:
+        input_val = args.hashcheck
+        # Initialize VirusTotal instance if needed
+        vt = None
+        if args.vt:
+            vt = VirusTotal(VT_API_KEY, VT_RATE_LIMIT, VT_DAILY_QUOTA)
+        # If input is a valid file path, compute its hash; otherwise, assume it's a raw hash.
+        if os.path.isfile(input_val):
+            computed_hash = scanner.hash_file(input_val)
+            print(f"\n[+] File: {input_val}")
+            print(f"    SHA256: {computed_hash}")
+            if args.compare:
+                print(f"    Expected: {args.compare}")
+                if args.compare.lower() == computed_hash.lower():
+                    print(f"{GREEN}[✓] Match: File hash matches expected hash.{RESET}")
+                else:
+                    print(f"{RED}[✗] Mismatch: File hash does NOT match expected hash.{RESET}")
+            if args.vt:
+                if not VT_API_KEY:
+                    print(f"{RED}[!] VirusTotal API key not set. Skipping VT check.{RESET}")
+                else:
+                    result = vt.query_hash(computed_hash, use_cache=(VT_USE_CACHE and not args.vt_no_cache))
+                    print_vt_result(computed_hash, result)
+        else:
+            # Assume the input is a raw hash string.
+            raw_hash = input_val
+            print(f"\n[+] Using provided hash: {raw_hash}")
+            if args.compare:
+                if args.compare.lower() == raw_hash.lower():
+                    print(f"{GREEN}[✓] Provided hash matches expected hash.{RESET}")
+                else:
+                    print(f"{RED}[✗] Provided hash does NOT match expected hash.{RESET}")
+            if args.vt:
+                if not VT_API_KEY:
+                    print(f"{RED}[!] VirusTotal API key not set. Skipping VT check.{RESET}")
+                else:
+                    result = vt.query_hash(raw_hash, use_cache=(VT_USE_CACHE and not args.vt_no_cache))
+                    print_vt_result(raw_hash, result)
+        return  # Exit early after processing hashcheck
 
     # If --all is set, override --user
     if args.all and args.user:
@@ -142,7 +214,7 @@ EXAMPLES:
 
                 print()
 
-    # Export / CSV / VirusTotal
+    # Export / CSV / VirusTotal for full process scan
     output_folder = None
     base_name = None
 
@@ -162,7 +234,7 @@ EXAMPLES:
         if not quiet_mode:
             print(f"✅ CSV saved to: {csv_file}")
 
-    # VirusTotal checks
+    # VirusTotal checks for full scan
     if args.vt and VT_API_KEY:
         vt = VirusTotal(VT_API_KEY, VT_RATE_LIMIT, VT_DAILY_QUOTA)
         vt_report_path = os.path.join(output_folder, f"virustotal_report_{base_name.replace('.json', '.txt')}")
