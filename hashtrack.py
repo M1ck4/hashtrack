@@ -177,9 +177,6 @@ EXAMPLES:
             print_to_console=not quiet_mode
         )
 
-        if not quiet_mode:
-            print(f"📄 VirusTotal report saved to: {vt_report_path}")
-
     # Cleanup old logs
     keep_days = args.keep_days if args.keep_days is not None else DEFAULT_KEEP_DAYS
     cleanup.cleanup_logs(DEFAULT_FOLDER, keep_days)
