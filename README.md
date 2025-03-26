@@ -59,6 +59,15 @@ All results can be exported to timestamped folders in both JSON and CSV formats.
 **Log Cleanup**  
 To prevent long term clutter, HashTrack automatically removes old log folders after a configurable number of days. This setting is managed through the config file or via command-line overrides.
 
+**HashCheck Mode**  
+HashTrack supports single file or raw hash verification with the `--hashcheck` flag. This lightweight feature allows users to:
+- Compute the SHA256 hash of a file
+- Compare it against a known hash using `--compare`
+- Query VirusTotal with `--vt`
+- Input a raw SHA256 hash directly
+
+This is ideal for quick triage or investigation without scanning the full system.
+
 ---
 
 ## Requirements
@@ -130,7 +139,25 @@ python hashtrack.py --vt --vt-no-cache --quiet
 ```
 Queries VirusTotal without using the local cache and runs in quiet mode, suppressing all output except final timing information. Useful for automated scripts.
 
-These examples cover common tasks and provide a good starting point for integrating HashTrack into daily workflows or larger incident response pipelines.
+```bash
+python hashtrack.py --hashcheck "C:\\Path\\To\\file.exe"
+```
+Computes the SHA256 of a single file and prints the result.
+
+```bash
+python hashtrack.py --hashcheck file.exe --compare a1b2c3...
+```
+Computes the file hash and compares it against a known hash.
+
+```bash
+python hashtrack.py --hashcheck a1b2c3... --vt
+```
+Checks a raw SHA256 hash directly with VirusTotal.
+
+```bash
+python hashtrack.py --hashcheck file.exe --vt
+```
+Hashes the file and performs a VT lookup.
 
 ---
 
@@ -157,6 +184,8 @@ quiet_default = no
 ```
 
 Settings control VirusTotal usage, log retention, console verbosity, and caching behavior.
+
+The `--hashcheck` mode uses the same VirusTotal settings from this configuration file. No additional entries are required.
 
 ---
 
@@ -205,4 +234,3 @@ Ensure the script has write permissions in the current working directory or the 
 ## License
 
 HashTrack is licensed under the MIT License. Use, modify, and distribute with attribution.
-
