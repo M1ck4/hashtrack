@@ -3,115 +3,183 @@
 ![Python 3.6+](https://img.shields.io/badge/python-3.6%2B-blue.svg)
 ![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen.svg)
 
-**HashTrack** is a modular command‐line utility for enumerating running processes, computing SHA256 hashes of executables, optionally checking them against VirusTotal, exporting scan results, and (on Windows) validating digital signatures. It is designed to be lightweight yet flexible, providing a clear view of process metadata and threat intelligence lookups in one place.
+**HashTrack** is a modular command-line utility designed for detailed process inspection, malware analysis, and system observability. It enables the identification of running executables, computes SHA256 cryptographic hashes, optionally verifies digital signatures on Windows systems, and queries VirusTotal for threat intelligence all in a lightweight and configurable manner. It is intended for professionals who need detailed, structured insight into what is running on a system and how to assess its legitimacy.
 
-## Table of Contents
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Usage](#usage)
-  - [Basic Commands](#basic-commands)
-  - [Exporting Results](#exporting-results)
-  - [VirusTotal Integration](#virustotal-integration)
-  - [Digital Signature Checks](#digital-signature-checks)
-- [Configuration](#configuration)
-- [Logging and Cleanup](#logging-and-cleanup)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
+---
+
+## Overview
+
+HashTrack provides an organized and automated method to analyze active processes on your machine. It captures metadata about each process, including the executable path, associated user, process IDs, parent process relationships, and more. It calculates a SHA256 hash of the executable binary, which serves as a unique identifier for checking against external threat databases like VirusTotal.
+
+Beyond simple enumeration, HashTrack can export results to structured files (JSON and CSV), allowing integration with logging systems or forensic archives. If run on Windows, it can also perform Authenticode signature checks using PowerShell, offering insight into whether a file is signed, valid, and trusted.
+
+The tool is intended for:
+- Threat detection and investigation
+- Digital forensics and incident response (DFIR)
+- Baseline process analysis in secure environments
+- Reverse engineering support
+- Audit trail creation for security reviews
+
+---
 
 ## Features
 
-- **Process Enumeration:** Scan system or user‐level processes, choosing `--all` or `--user`.
-- **SHA256 Hashing:** Generate unique fingerprints for each `.exe`.
-- **Export Options:** Write results to JSON/CSV for documentation or further analysis.
-- **VirusTotal Lookups:** Cache results to avoid re-checking the same hash and hitting free-tier limits.
-- **Signature Verification (Windows):** Runs PowerShell’s `Get-AuthenticodeSignature` for Authenticode details.
-- **Automatic Log Cleanup:** Remove stale logs after a configurable number of days.
+**Process Enumeration**  
+HashTrack scans all currently running processes using the `psutil` library. It captures various details per process, such as:
+- Executable path
+- Username under which the process is running
+- PID and PPID (parent process ID)
+- Creation time
+- CPU and memory usage (if verbose mode is enabled)
+
+This comprehensive view enables identification of unusual or unexpected processes that may be signs of compromise or misconfiguration.
+
+**SHA256 Hashing**  
+Every executable is hashed using the SHA256 algorithm. This cryptographic fingerprint can be used to:
+- Check for known malware via VirusTotal
+- Identify if a binary has changed or been tampered with
+- Compare processes across systems or time snapshots
+
+**VirusTotal Integration**  
+HashTrack can query VirusTotal for any unique hash it computes. If the hash is known to VirusTotal, the tool will retrieve a summary of detections, including counts for malicious, suspicious, harmless, and undetected verdicts. 
+
+To manage usage effectively, it includes a local caching mechanism to avoid redundant queries and respects both rate limits and daily quotas. This makes it viable even on the free-tier of the VirusTotal API.
+
+**Signature Verification**  
+On Windows, HashTrack invokes PowerShell to check digital signatures using the `Get-AuthenticodeSignature` command. It reports:
+- Status (e.g., Valid, NotSigned, or an error code)
+- Certificate issuer and subject
+- Validity period (from/to dates)
+
+This feature helps determine whether the executable comes from a trusted source or has been unsigned or altered.
+
+**Exporting and Logging**  
+All results can be exported to timestamped folders in both JSON and CSV formats. This makes it easy to archive results, track changes over time, or load into external tools for further analysis. Logs are stored by default under the `logs/YYYY-MM-DD/` directory structure.
+
+**Log Cleanup**  
+To prevent long-term clutter, HashTrack automatically removes old log folders after a configurable number of days. This setting is managed through the config file or via command-line overrides.
+
+---
 
 ## Requirements
 
-- **Python 3.6+**
-- **Packages:**  
-  - `psutil` (for process enumeration)  
-  - `requests` (for VirusTotal API calls)
-- (Optional) **PowerShell** on Windows if using `--check-signatures`.
+- Python 3.6 or higher
+- Dependencies:
+  - `psutil` for process enumeration
+  - `requests` for VirusTotal API access
+- (Windows only) PowerShell for signature verification
+
+Install dependencies with:
+
+```bash
+pip install psutil requests
+```
+
+---
 
 ## Installation
 
-1. **Clone** or download this repository.  
-2. **Install dependencies**:
-    
-        pip install psutil requests
+1. Clone or download the repository.
+2. Install the required dependencies.
+3. (Optional) Edit `config.ini` and insert your VirusTotal API key if you plan to use the `--vt` feature.
 
-3. **(Optional)** Provide a VirusTotal API key in `config.ini` if using `--vt`.
+---
 
-## Usage
+## Basic Use
 
-Run the main script with various flags to control the output and behavior:
+To use HashTrack with its default behavior, simply run:
 
-    python hashtrack.py [OPTIONS]
+```bash
+python hashtrack.py
+```
 
-### Basic Commands
+This performs a default scan of system level processes, computing SHA256 hashes and printing standard metadata for each. It does not require any additional arguments to function.
 
-- **`--all`**: Include all processes (both user and system).  
-- **`--user`**: Only include user‐level processes (skip system ones).  
-- **`--minimal`**: Print only path + hash.  
-- **`--verbose`**: Show extended details (CPU usage, memory usage, parent name, etc.).
+To get help and view all available options:
 
-### Exporting Results
+```bash
+python hashtrack.py --help
+```
 
-- **`--export`**: Write results to JSON in a date‐stamped folder under `logs/`.  
-- **`--csv`**: Also produce a CSV with the same data.  
-- **`--keep-days X`**: Remove logs older than `X` days at the end of each run.
+or
 
-### VirusTotal Integration
+```bash
+python hashtrack.py -h
+```
 
-- **`--vt`**: Check each unique SHA256 against VirusTotal.  
-  - Requires `api_key` in `config.ini`.  
-  - Caches responses to `.cache/vt_cache.json` by default if `use_cache = yes`.  
-- **`--vt-no-cache`**: Force new lookups, ignoring the local cache.
+The help text will show all supported flags, including those for exporting, querying VirusTotal, checking signatures, filtering process types, and adjusting verbosity.
 
-### Digital Signature Checks
-
-- **`--check-signatures`**: (Windows only) Use PowerShell’s `Get-AuthenticodeSignature` to examine `.exe` certificates.  
-  - Outputs status (e.g. `Valid`, `NotSigned`, or integer status codes) plus the issuer and subject info, if present.
+---
 
 ## Configuration
 
-The `config.ini` file in the same folder defines defaults:
+HashTrack uses a `config.ini` file to manage persistent settings. If this file does not exist, it will be auto-generated with defaults on first run.
 
-    [virustotal]
-    api_key = YOUR_API_KEY
-    rate_limit_per_min = 4
-    daily_quota = 500
-    use_cache = yes
-    cache_expiry_days = 7
+Example structure:
 
-    [output]
-    default_folder = logs
-    keep_days = 7
+```ini
+[virustotal]
+api_key = your_api_key_here
+rate_limit_per_min = 4
+daily_quota = 500
+use_cache = yes
+cache_expiry_days = 7
 
-    [options]
-    quiet_default = no
+[output]
+default_folder = logs
+keep_days = 7
 
-- **`api_key`**: Your VirusTotal API key.  
-- **`rate_limit_per_min`**, **`daily_quota`**: The script respects these limits for free-tier usage.  
-- **`use_cache`**: Set to `yes` if you want to cache VirusTotal results.  
-- **`keep_days`**: Default days to keep logs.  
-- **`quiet_default`**: If set to `yes`, the script runs in quiet mode unless overridden by `--quiet`.
+[options]
+quiet_default = no
+```
 
-## Logging and Cleanup
+Settings control VirusTotal usage, log retention, console verbosity, and caching behavior.
 
-- Exports and logs go into `logs/<YYYY-MM-DD>` automatically.  
-- **`--keep-days X`** removes older logs.  
-- The `.cache/vt_cache.json` is where VirusTotal responses are stored.
+---
+
+## Logging and Output
+
+When exporting is enabled, scan results are saved to a structured folder:
+
+```
+logs/2025-03-26/hashtrack_15-02-18.json
+```
+
+Logs older than a defined number of days (default: 7) will be removed automatically unless otherwise specified in `config.ini` or via the `--keep-days` argument.
+
+VirusTotal results, if retrieved, are cached to:
+
+```
+.cache/vt_cache.json
+```
+
+This cache avoids re-querying the same hashes repeatedly, helping you stay within API limits.
+
+---
 
 ## Troubleshooting
 
-- **No API Key:** If you run `--vt` without specifying your key in `config.ini`, the script will skip VirusTotal checks.  
-- **Signature Status = 0:** Some Windows/PowerShell versions return numeric codes for signature checks. The script attempts to parse these plus any message string.  
-- **Permission Errors:** If certain system processes are unreadable, run in an elevated (admin) terminal on Windows.
+**Issue: No API Key Set**  
+If you attempt to use `--vt` but the `api_key` in `config.ini` is blank or missing, VirusTotal lookups will be silently skipped. A warning will be printed in the console unless quiet mode is enabled.
+
+**Issue: Permission Denied / Missing Processes**  
+On certain systems, especially Windows, some system processes may not be accessible without elevated privileges. Run the terminal or command prompt as Administrator to gain full access to process metadata.
+
+**Issue: Signature Check Fails**  
+Digital signature checks require PowerShell and only work on Windows. If you're on Linux or macOS, or if PowerShell is not in your system PATH, this feature will be unavailable. You may also encounter signature errors if the file is unsigned or the certificate is expired.
+
+**Issue: Hash Missing or Null**  
+If a file cannot be read (locked, deleted mid-scan, or permission denied), no hash will be produced for that process. This is expected behavior.
+
+**Issue: VirusTotal Quota Exceeded**  
+The free API tier has a daily quota (default: 500). If this is exceeded, VirusTotal responses will return error messages. Enable caching to avoid redundant calls and preserve your quota.
+
+**Issue: Logs Not Saving**  
+Ensure the script has write permissions in the current working directory or the designated log directory. If `logs/` cannot be created, no output files will be generated.
+
+---
 
 ## License
 
-This project is licensed under the **MIT License**.  
+HashTrack is licensed under the MIT License. Use, modify, and distribute with attribution.
+
