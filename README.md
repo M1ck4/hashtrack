@@ -57,7 +57,7 @@ This feature helps determine whether the executable comes from a trusted source 
 All results can be exported to timestamped folders in both JSON and CSV formats. This makes it easy to archive results, track changes over time, or load into external tools for further analysis. Logs are stored by default under the `logs/YYYY-MM-DD/` directory structure.
 
 **Log Cleanup**  
-To prevent long-term clutter, HashTrack automatically removes old log folders after a configurable number of days. This setting is managed through the config file or via command-line overrides.
+To prevent long term clutter, HashTrack automatically removes old log folders after a configurable number of days. This setting is managed through the config file or via command-line overrides.
 
 ---
 
@@ -93,21 +93,44 @@ To use HashTrack with its default behavior, simply run:
 python hashtrack.py
 ```
 
-This performs a default scan of system level processes, computing SHA256 hashes and printing standard metadata for each. It does not require any additional arguments to function.
+This performs a scan of system-level processes, printing out standard metadata including the executable path, SHA256 hash, process ID, and parent relationships. No options are required for this default scan, and results are displayed directly in the console.
 
-To get help and view all available options:
+To access the help menu, which displays all supported flags, run:
 
 ```bash
 python hashtrack.py --help
 ```
 
-or
+This help output includes descriptions for each available flag, along with usage examples embedded in the tool's documentation footer.
+
+### Example Commands and What They Do
 
 ```bash
-python hashtrack.py -h
+python hashtrack.py --user --export
 ```
+Scans only user-level processes and saves the output to a JSON file in the `logs/YYYY-MM-DD/` folder.
 
-The help text will show all supported flags, including those for exporting, querying VirusTotal, checking signatures, filtering process types, and adjusting verbosity.
+```bash
+python hashtrack.py --all --vt
+```
+Scans all running processes (system and user), computes their SHA256 hashes, and checks each hash against VirusTotal. Requires a valid API key in `config.ini`.
+
+```bash
+python hashtrack.py --verbose --csv
+```
+Includes extended details like CPU/memory usage and parent process names, and exports the results to a CSV file for further inspection or reporting.
+
+```bash
+python hashtrack.py --check-signatures
+```
+On Windows systems, uses PowerShell to verify the digital signature of each executable. This is useful for verifying trust and integrity.
+
+```bash
+python hashtrack.py --vt --vt-no-cache --quiet
+```
+Queries VirusTotal without using the local cache and runs in quiet mode, suppressing all output except final timing information. Useful for automated scripts.
+
+These examples cover common tasks and provide a good starting point for integrating HashTrack into daily workflows or larger incident response pipelines.
 
 ---
 
