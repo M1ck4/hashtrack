@@ -2,7 +2,14 @@ import psutil
 import hashlib
 import os
 import subprocess
+import re
 from typing import List, Dict, Optional
+
+def is_valid_sha256(s: str) -> bool:
+    """
+    Checks if the provided string is a valid SHA256 hash (64 hexadecimal characters).
+    """
+    return bool(re.fullmatch(r"[a-fA-F0-9]{64}", s))
 
 def hash_file(path: str) -> Optional[str]:
     """
