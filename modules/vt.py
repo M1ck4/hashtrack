@@ -119,9 +119,10 @@ class VirusTotal:
         # 7) Parse the response
         if response.status_code == 200:
             data = response.json()
-            result = data.get("data", {}).get("attributes", {})
-            stats = result.get("last_analysis_stats", {})
-            permalink = data.get("data", {}).get("links", {}).get("self", "")
+            result_data = data.get("data", {})
+            attributes = result_data.get("attributes", {})
+            stats = attributes.get("last_analysis_stats", {})
+            permalink = result_data.get("links", {}).get("self", "")
 
             parsed = {
                 "malicious": stats.get("malicious", 0),
@@ -150,7 +151,8 @@ def generate_vt_report(
     Gathers unique hashes from proc_data, queries them with vt,
     prints immediate real-time results to the console for each hash,
     and writes a text report to output_path at the end.
-    Now also shows the .exe name/path with each hash during console output.
+    Also includes a direct VirusTotal web GUI link for each hash and
+    appends a summary of the overall scan results.
     """
     # 1) Build a map of hash -> list of (exe name, path) for reference
     hash_to_paths = {}
@@ -174,10 +176,12 @@ def generate_vt_report(
 
     # 3) Query each unique hash & print results immediately
     for index, h in enumerate(unique_hashes, start=1):
-        # Show which hash we're scanning
+        # Compute the GUI link for the hash
+        gui_link = f"https://www.virustotal.com/gui/file/{h}"
+        
+        # Show which hash we're scanning along with its associated .exe info
         if print_to_console:
             print(f"{YELLOW}[{index}/{len(unique_hashes)}]{RESET} Scanning hash: {h}", flush=True)
-            # Print which .exe(s) share this hash
             for (exe_name, exe_path) in hash_to_paths[h]:
                 print(f"  EXE: {exe_name}")
                 print(f"  Path: {exe_path}")
@@ -203,9 +207,10 @@ def generate_vt_report(
                 print(f"  Suspicious: {sus_str}")
                 print(f"  Undetected: {undetected}")
                 print(f"  Harmless: {harmless}")
-                print(f"  Link: {result['permalink']}\n", flush=True)
+                print(f"  API Link: {result['permalink']}")
+                print(f"  Web Link: {gui_link}\n", flush=True)
 
-    # 4) Write the final text report
+    # 4) Write the final text report including individual file results
     with open(output_path, 'w', encoding='utf-8') as report:
         report.write("# VirusTotal Report\n\n")
         for proc in proc_data:
@@ -218,6 +223,7 @@ def generate_vt_report(
 
             if h:
                 final = vt_results.get(h, {"error": "No result found"})
+                gui_link = f"https://www.virustotal.com/gui/file/{h}"
                 if 'error' in final:
                     report.write(f"  Error: {final['error']}\n\n")
                 else:
@@ -227,9 +233,61 @@ def generate_vt_report(
                     report.write(f"  Undetected: {final['undetected']}\n")
                     report.write(f"  Harmless: {final['harmless']}\n")
                     report.write(f"  Last Checked: {final['timestamp']}\n")
-                    report.write(f"  Link: {final['permalink']}\n\n")
+                    report.write(f"  API Link: {final['permalink']}\n")
+                    report.write(f"  Web Link: {gui_link}\n\n")
             else:
                 report.write("  Error: No hash available\n\n")
+
+        # 5) Compute and write a summary of the overall scan results
+        total_hashes = len(unique_hashes)
+        malicious_count = 0
+        suspicious_count = 0
+        undetected_count = 0
+        flagged_malicious = []
+        flagged_suspicious = []
+        for h, result in vt_results.items():
+            if 'error' in result:
+                continue
+            if result['malicious'] > 0:
+                malicious_count += 1
+                flagged_malicious.append(f"https://www.virustotal.com/gui/file/{h}")
+            if result['suspicious'] > 0:
+                suspicious_count += 1
+                flagged_suspicious.append(f"https://www.virustotal.com/gui/file/{h}")
+            if result['malicious'] == 0 and result['suspicious'] == 0:
+                undetected_count += 1
+
+        report.write("========== Summary ==========\n")
+        report.write(f"Total unique hashes scanned: {total_hashes}\n")
+        report.write(f"Undetected: {undetected_count}\n")
+        report.write(f"Malicious: {malicious_count}\n")
+        report.write(f"Suspicious: {suspicious_count}\n")
+        if flagged_malicious:
+            report.write("Possible malicious files:\n")
+            for link in flagged_malicious:
+                report.write(f"  {link}\n")
+        if flagged_suspicious:
+            report.write("Possible suspicious files:\n")
+            for link in flagged_suspicious:
+                report.write(f"  {link}\n")
+        report.write("\n")
+
+    # 6) Print the summary to the console as well
+    if print_to_console:
+        print("========== Summary ==========")
+        print(f"Total unique hashes scanned: {total_hashes}")
+        print(f"Undetected: {undetected_count}")
+        print(f"Malicious: {malicious_count}")
+        print(f"Suspicious: {suspicious_count}")
+        if flagged_malicious:
+            print("Possible malicious files:")
+            for link in flagged_malicious:
+                print(f"  {link}")
+        if flagged_suspicious:
+            print("Possible suspicious files:")
+            for link in flagged_suspicious:
+                print(f"  {link}")
+        print()
 
     if print_to_console:
         print(f"{GREEN}Scanning complete. Full report written to: {output_path}{RESET}\n")
